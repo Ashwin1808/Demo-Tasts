@@ -18,6 +18,10 @@ permissions:
 
 jobs:
 
+  # ============================================================
+  # BACKEND TESTS
+  # ============================================================
+
   backend-test:
     name: Backend Tests
     runs-on: ubuntu-latest
@@ -40,6 +44,10 @@ jobs:
       - name: Run Maven verification
         run: mvn clean verify
 
+
+  # ============================================================
+  # FRONTEND BUILD
+  # ============================================================
 
   frontend-build:
     name: Frontend Build
@@ -67,6 +75,10 @@ jobs:
         run: npm run build
 
 
+  # ============================================================
+  # SECRET SCAN
+  # ============================================================
+
   secret-scan:
     name: Secret Scan - Gitleaks
     runs-on: ubuntu-latest
@@ -83,8 +95,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
+  # ============================================================
+  # FILESYSTEM SECURITY SCAN
+  # ============================================================
+
   security-scan:
-    name: Security Scan - Trivy
+    name: Security Scan - Trivy Filesystem
     runs-on: ubuntu-latest
 
     steps:
@@ -97,6 +113,90 @@ jobs:
           scan-type: fs
           scan-ref: .
           scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+
+  # ============================================================
+  # DOCKER IMAGE BUILD
+  # ============================================================
+
+  docker-build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+
+    needs:
+      - backend-test
+      - frontend-build
+      - secret-scan
+      - security-scan
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          tags: task-manager-backend:ci
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          tags: task-manager-frontend:ci
+
+
+  # ============================================================
+  # DOCKER IMAGE SECURITY SCAN
+  # ============================================================
+
+  docker-image-scan:
+    name: Scan Docker Images
+    runs-on: ubuntu-latest
+
+    needs:
+      - docker-build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build backend image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          load: true
+          tags: task-manager-backend:ci
+
+      - name: Build frontend image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          load: true
+          tags: task-manager-frontend:ci
+
+      - name: Scan backend Docker image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: task-manager-backend:ci
+          scan-type: image
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Scan frontend Docker image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: task-manager-frontend:ci
+          scan-type: image
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: 1
