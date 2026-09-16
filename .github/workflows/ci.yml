@@ -200,3 +200,26 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: 0
+      - name: Generate backend SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: task-manager-backend:ci
+          format: cyclonedx
+          output: backend-sbom.json
+          exit-code: 0
+
+      - name: Generate frontend SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: task-manager-frontend:ci
+          format: cyclonedx
+          output: frontend-sbom.json
+          exit-code: 0
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-manager-sboms
+          path: |
+            backend-sbom.json
+            frontend-sbom.json
