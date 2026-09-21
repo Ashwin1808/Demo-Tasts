@@ -182,19 +182,19 @@ jobs:
         with:
           context: ./backend
           load: true
-          tags: task-manager-backend:ci
+          tags: task-manager-backend:${{ github.sha }}
 
       - name: Build frontend image for scanning
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           load: true
-          tags: task-manager-frontend:ci
+          tags: task-manager-frontend:${{ github.sha }}
 
       - name: Scan backend Docker image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: task-manager-backend:ci
+          image-ref: task-manager-backend:${{ github.sha }}
           scan-type: image
           severity: HIGH,CRITICAL
           ignore-unfixed: true
@@ -203,7 +203,7 @@ jobs:
       - name: Scan frontend Docker image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: task-manager-frontend:ci
+          image-ref: task-manager-frontend:${{ github.sha }}
           scan-type: image
           severity: HIGH,CRITICAL
           ignore-unfixed: true
@@ -211,7 +211,7 @@ jobs:
       - name: Generate backend SBOM
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: task-manager-backend:ci
+          image-ref: task-manager-backend:${{ github.sha }}
           format: cyclonedx
           output: backend-sbom.json
           exit-code: 0
@@ -219,7 +219,7 @@ jobs:
       - name: Generate frontend SBOM
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: task-manager-frontend:ci
+          image-ref: task-manager-frontend:${{ github.sha }}
           format: cyclonedx
           output: frontend-sbom.json
           exit-code: 0
