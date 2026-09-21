@@ -152,14 +152,14 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ghcr.io/ashwin1808/task-manager-backend:ci
+          tags: ghcr.io/ashwin1808/task-manager-backend:${{ github.sha }}
 
       - name: Build frontend image
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: true
-          tags: ghcr.io/ashwin1808/task-manager-frontend:ci
+          tags: ghcr.io/ashwin1808/task-manager-frontend:${{ github.sha }}
 
 
   # ============================================================
