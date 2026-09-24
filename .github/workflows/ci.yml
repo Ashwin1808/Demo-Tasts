@@ -274,3 +274,48 @@ jobs:
         run: |
           docker push \
             ghcr.io/ashwin1808/task-manager-frontend:${{ github.sha }}
+
+  # ============================================================
+  # UPDATE GITOPS REPOSITORY
+  # ============================================================
+
+  update-gitops:
+    name: Update GitOps Repository
+    runs-on: ubuntu-latest
+
+    needs:
+      - docker-build-scan-publish
+
+    steps:
+
+      - name: Checkout GitOps repository
+        uses: actions/checkout@v6
+        with:
+          repository: Ashwin1808/task-manager-gitops
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: task-manager-gitops
+
+      - name: Update image tags
+        working-directory: task-manager-gitops
+        run: |
+          sed -i \
+            "s|tag: dev|tag: ${{ github.sha }}|" \
+            helm/task-manager/values.yaml
+
+          sed -i \
+            "s|tag: latest|tag: ${{ github.sha }}|" \
+            helm/task-manager/values.yaml
+
+      - name: Commit and push GitOps changes
+        working-directory: task-manager-gitops
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add helm/task-manager/values.yaml
+
+          git commit \
+            -m "chore: update images to ${{ github.sha }}" \
+            || echo "No changes to commit"
+
+          git push
