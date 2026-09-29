@@ -24,6 +24,8 @@ pipeline {
                 sh 'java -version'
                 sh 'git --version'
                 sh 'docker --version'
+                sh 'node --version || true'
+                sh 'npm --version || true'
             }
         }
 
@@ -31,7 +33,7 @@ pipeline {
             steps {
                 sh '''
                     cd backend
-                    ./mvnw test
+                    mvn test
                 '''
             }
         }
