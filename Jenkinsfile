@@ -103,6 +103,39 @@ pipeline {
         }
     }
 
+    stage('Update GitOps') {
+      steps {
+          withCredentials([
+              usernamePassword(
+                  credentialsId: 'gitops-creds',
+                  usernameVariable: 'GIT_USERNAME',
+                  passwordVariable: 'GIT_TOKEN'
+              )
+          ]) {
+              sh '''
+                  rm -rf gitops
+
+                  git clone https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/Ashwin1808/task-manager-gitops.git gitops
+
+                  cd gitops
+
+                  sed -i "/repository: ghcr.io\\/ashwin1808\\/task-manager-backend/{n;s/tag:.*/tag: ${IMAGE_TAG}/;}" helm/task-manager/values.yaml
+
+                  sed -i "/repository: ghcr.io\\/ashwin1808\\/task-manager-frontend/{n;s/tag:.*/tag: ${IMAGE_TAG}/;}" helm/task-manager/values.yaml
+
+                  git config user.name "Jenkins"
+                  git config user.email "jenkins@local"
+
+                  git add helm/task-manager/values.yaml
+
+                  git commit -m "ci: update images to ${IMAGE_TAG}" || echo "No changes to commit"
+
+                  git push origin main
+              '''
+          }
+      }
+  }
+
     post {
         success {
             echo 'Jenkins CI + GHCR pipeline completed successfully.'
