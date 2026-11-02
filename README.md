@@ -15,6 +15,9 @@ The application repository is separate from the GitOps repository. Two alternati
 
 ## Architecture
 
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/36519caa-62f4-4fdb-abe3-a4d182c36aab" />
+
+
 ### Application
 
 ```mermaid
