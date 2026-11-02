@@ -1,169 +1,263 @@
-# Task Manager — Simple Monolith for DevOps/DevSecOps
+# Task Manager — DevOps & DevSecOps Portfolio Project
 
-Small, production-structured **Task Manager** app designed as a stable base for a full DevOps/DevSecOps pipeline (Git → GitHub → Maven → Tests → SonarQube → Trivy → Docker → Registry → K8s/Helm → GitHub Actions → Argo CD → Terraform → AWS/EKS/RDS → Prometheus/Grafana).
+A containerized monolithic task-management application used to demonstrate CI automation, container image delivery, GitOps deployment configuration, Kubernetes resources, and Terraform.
 
-No auth, no microservices, no queues — just a reliable monolith that containerizes cleanly.
+> **Accuracy note:** The files inspected confirm configuration. They do not, by themselves, prove that every pipeline, cluster deployment, or infrastructure operation is currently running. Add genuine screenshots and command output before claiming successful runtime deployment.
 
-## What it does
+## Project overview
 
-- Create / view / update / delete tasks
-- Mark tasks as `PENDING` or `COMPLETED`
-- Dashboard shows total / completed / pending counts
-- Health check endpoint for liveness
+The application consists of:
+- React + Vite frontend served by Nginx.
+- Spring Boot REST API running on Java 21.
+- PostgreSQL 16 database.
 
-Task fields: `id`, `title`, `description`, `status`, `createdAt`, `updatedAt`.
+The application repository is separate from the GitOps repository. Two alternative CI implementations are configured: GitHub Actions and Jenkins. They are not inherently sequential parts of one pipeline.
 
 ## Architecture
 
-```
-Browser (React + Vite)  -->  Spring Boot REST API  -->  PostgreSQL
-        :3000 (nginx)              :8080                     :5432
-```
+### Application
 
-- **Frontend**: React 18 + Vite, plain fetch, no UI framework bloat. Built to static files served by Nginx.
-- **Backend**: Java 21, Spring Boot 3.2, Spring Data JPA, Validation, PostgreSQL driver. Single jar.
-- **DB**: PostgreSQL 16, schema auto-managed by Hibernate `ddl-auto=update` (table `tasks`).
-
-```
-task-manager/
-├── frontend/               # Vite + React
-│   ├── src/                # App.jsx, api.js, index.css, main.jsx
-│   ├── Dockerfile          # multi-stage node → nginx
-│   ├── nginx.conf
-│   ├── package.json
-│   └── vite.config.js
-├── backend/                # Spring Boot (Maven)
-│   ├── src/main/java/com/taskmanager/
-│   │   ├── controller/     # TaskController, HealthController
-│   │   ├── service/        # TaskService
-│   │   ├── repository/     # TaskRepository (JpaRepository)
-│   │   ├── model/          # Task (JPA entity)
-│   │   ├── dto/            # TaskRequest
-│   │   └── config/         # WebConfig (CORS)
-│   ├── src/main/resources/application.properties
-│   ├── src/test/java/...   # Integration tests (H2)
-│   ├── Dockerfile          # multi-stage maven → jre
-│   └── pom.xml
-├── docker-compose.yml      # frontend + backend + postgres
-├── .env.example
-├── .gitignore
-└── README.md
+```mermaid
+flowchart TD
+  U[Browser] --> N[Nginx frontend]
+  N -->|/api| B[Spring Boot API]
+  B --> P[(PostgreSQL)]
 ```
 
-## Prerequisites
+### CI and GitOps
 
-- Java 21, Maven 3.9+
-- Node 20+, npm
-- Docker & Docker Compose v2
-- (Optional) PostgreSQL 16 if running backend natively
+```mermaid
+flowchart TD
+  GH[GitHub application repo] --> GA[GitHub Actions]
+  GH --> J[Jenkins]
+  GA --> R[GHCR images]
+  J --> R
+  GA --> G[GitOps repository]
+  J --> G
+  G --> H[Helm chart]
+  A[Argo CD] --> H
+  H --> K[Kubernetes]
+```
 
-## Run locally (without Docker)
+## Technology stack
 
-1. Start PostgreSQL locally and set env or edit `.env`:
+| Area | Tools |
+|---|---|
+| Frontend | React, Vite, Node.js 22, Nginx |
+| Backend | Java 21, Spring Boot, Maven |
+| Database | PostgreSQL 16 |
+| Containers | Docker, Docker Compose |
+| CI | GitHub Actions, Jenkins |
+| Security | Gitleaks, Trivy |
+| SBOM | CycloneDX via Trivy |
+| Registry | GitHub Container Registry |
+| CD / GitOps | Helm, Argo CD |
+| Kubernetes networking | Gateway API |
+| IaC | Terraform, AWS provider |
+
+## Local development
+
+Prerequisites: Docker Desktop installed and running.
 
 ```bash
-export DB_HOST=localhost
-export DB_PORT=5432
-export DB_NAME=taskdb
-export DB_USERNAME=postgres
-export DB_PASSWORD=postgres
-createdb taskdb   # if needed
+docker --version
+docker compose version
 ```
 
-2. Backend:
+Create a local `.env` file in the repository root. Do not commit it.
 
-```bash
-cd backend
-mvn test
-mvn spring-boot:run
-# or: mvn package && java -jar target/task-manager-1.0.0.jar
-# API at http://localhost:8080/api/health
+```dotenv
+DB_NAME=taskdb
+DB_USERNAME=postgres
+DB_PASSWORD=replace-with-local-password
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=replace-with-local-password
+VITE_API_URL=http://localhost:8080
 ```
 
-3. Frontend:
+Keep `DB_USERNAME`/`DB_PASSWORD` consistent with `POSTGRES_USER`/`POSTGRES_PASSWORD`.
 
 ```bash
-cd frontend
-npm install
-# point to backend (defaults to http://localhost:8080)
-echo "VITE_API_URL=http://localhost:8080" > .env
-npm run dev   # http://localhost:5173  (proxies /api to 8080)
-```
-
-## Run with Docker Compose (recommended)
-
-```bash
-cp .env.example .env   # adjust if needed
 docker compose up --build
 ```
 
+Endpoints:
 - Frontend: http://localhost:3000
-- Backend:  http://localhost:8080/api/health
-- Postgres: localhost:5432 (taskdb / postgres / postgres)
+- Backend health: http://localhost:8080/api/health
+- PostgreSQL host port: 5433 (container port 5432)
 
-Stop: `docker compose down` — add `-v` to wipe DB volume.
-
-Frontend build arg: `VITE_API_URL` is baked at build time (Dockerfile `ARG`). Compose uses default `http://localhost:8080` which works locally; for remote deploy set `VITE_API_URL` accordingly and rebuild.
-
-## API Endpoints
-
-| Method | Path | Body | Description |
-|--------|------|------|-------------|
-| GET | `/api/health` | — | `{ "status": "UP" }` |
-| GET | `/api/tasks` | — | List all tasks |
-| GET | `/api/tasks/{id}` | — | Get one task (404 if missing) |
-| POST | `/api/tasks` | `{ title*, description, status }` | Create; status defaults to PENDING |
-| PUT | `/api/tasks/{id}` | `{ title, description, status }` | Partial update; status must be PENDING/COMPLETED |
-| DELETE | `/api/tasks/{id}` | — | Delete (204) |
-
-Example:
+Useful commands:
 
 ```bash
-curl http://localhost:8080/api/health
-curl http://localhost:8080/api/tasks
-curl -X POST http://localhost:8080/api/tasks -H 'Content-Type: application/json' -d '{"title":"Buy milk"}'
-curl -X PUT http://localhost:8080/api/tasks/1 -H 'Content-Type: application/json' -d '{"status":"COMPLETED"}'
-curl -X DELETE http://localhost:8080/api/tasks/1
+docker compose ps
+docker compose logs -f
+docker compose logs -f backend
+docker compose down
 ```
 
-## Environment Variables
+`docker compose down -v` also deletes the named database volume and its local data. Use it only when that is intended.
 
-Backend (`application.properties` reads these with defaults shown):
+The backend waits for PostgreSQL health. The frontend waits for the backend container to start, which does not guarantee the API is ready; a backend health check and `service_healthy` dependency would improve startup reliability.
 
-| Var | Default | Description |
-|-----|---------|-------------|
-| `DB_HOST` | `localhost` | Postgres host |
-| `DB_PORT` | `5432` | Postgres port |
-| `DB_NAME` | `taskdb` | Database name |
-| `DB_USERNAME` | `postgres` | DB user |
-| `DB_PASSWORD` | `postgres` | DB password |
-| `SERVER_PORT` | `8080` | Backend port |
+## GitHub Actions
 
-Frontend build-time:
+Workflow: `.github/workflows/ci.yml`
 
-| Var | Default | Description |
-|-----|---------|-------------|
-| `VITE_API_URL` | `http://localhost:8080` | Backend base URL baked into `dist/` |
+Triggers: pushes and pull requests to `main` and `develop`, plus manual dispatch.
 
-`docker-compose.yml` wires `backend.DB_HOST=postgres` (service name) automatically.
+Configured workflow:
+1. Backend verification using Temurin Java 21 and `mvn clean verify`.
+2. Frontend build using Node.js 22, `npm ci`, and `npm run build`.
+3. Gitleaks secret scan.
+4. Trivy filesystem scan for vulnerabilities, secrets, and misconfigurations at HIGH/CRITICAL severity.
+5. Build frontend and backend Docker images.
+6. Trivy image scans.
+7. Generate CycloneDX SBOMs and upload them as artifacts.
+8. Tag images with the Git commit SHA and push to GHCR.
+9. Update image tags in the separate GitOps repository.
 
-## How the database works
+The filesystem scan uses `exit-code: 1`, so configured findings can fail the job. The image scan steps use `exit-code: 0`, so they report findings but do not currently block the pipeline. The GitOps update requires a GitHub secret named `GITOPS_TOKEN`. GHCR publishing uses `GITHUB_TOKEN` with package write permission.
 
-- Table `tasks` (JPA `@Entity`, `@Table(name="tasks")`) created by Hibernate `ddl-auto=update`.
-- Columns: `id` (BIGSERIAL PK), `title` (NOT NULL), `description` (TEXT), `status` (VARCHAR 20, `PENDING`/`COMPLETED`), `created_at`, `updated_at` (managed by `@CreationTimestamp`/`@UpdateTimestamp`).
-- No migrations needed for this stage; later pipeline can introduce Flyway/Liquibase if desired.
-- Tests use H2 in-memory (`create-drop`) so no external DB required for `mvn test`.
+## Jenkins
 
-## Testing
+Pipeline: `Jenkinsfile`; custom Jenkins image definition: `Dockerfile.jenkins`.
+
+Configured stages:
+1. Checkout.
+2. Environment check.
+3. Backend tests (`mvn test`).
+4. Frontend install/build (`npm ci`, `npm run build`).
+5. Build backend and frontend Docker images.
+6. GHCR login using Jenkins credential ID `ghcr-creds`.
+7. Push build-number and `jenkins` tags.
+8. Verify local images.
+9. Update and push GitOps Helm image tags.
+
+Jenkins also expects credential ID `gitops-creds`. Store credentials in Jenkins Credentials; never commit their values. The inspected Jenkinsfile does not contain the Gitleaks, Trivy, or SBOM stages present in GitHub Actions.
+
+## Container registry
+
+Configured repositories:
+- `ghcr.io/ashwin1808/task-manager-backend`
+- `ghcr.io/ashwin1808/task-manager-frontend`
+
+GitHub Actions uses the full Git commit SHA as image tag. Jenkins uses the build number and also publishes a `jenkins` tag.
+
+## GitOps and Argo CD
+
+Separate repository: https://github.com/Ashwin1808/task-manager-gitops
+
+`argocd/task-manager.yaml` configures:
+- Application `task-manager` in namespace `argocd`.
+- Source branch `main`, path `helm/task-manager`.
+- Destination namespace `task-manager`.
+- Automated sync, prune, and self-heal.
+- `CreateNamespace=true`.
+
+Expected flow:
+1. CI builds and publishes images.
+2. CI updates image tags in GitOps.
+3. Argo CD observes the Git change.
+4. Argo CD reconciles Helm-rendered desired state with Kubernetes.
+
+The manifest proves intended configuration, not live health. Capture Argo CD `Synced` and `Healthy` status before claiming a successful deployment.
+
+## Kubernetes and Helm
+
+The Helm chart is in `helm/task-manager` in the GitOps repository. Inspected configuration includes:
+- Backend initial replicas: 2.
+- Frontend replicas: 1.
+- Backend HPA: min 2, max 5, CPU target 70%.
+- Backend scale-down stabilization: 300 seconds.
+- Backend and frontend resource requests and limits.
+- RollingUpdate strategy: `maxSurge: 1`, `maxUnavailable: 0`.
+- Backend readiness/liveness probes against `/api/health`.
+- Frontend readiness/liveness probes against `/`.
+- PostgreSQL 16 Alpine and a 1 GiB PVC.
+- GHCR image pull secret reference `ghcr-secret`.
+
+Gateway API configuration:
+- Gateway class `eg`, HTTP listener on port 80.
+- `/api` routes to `task-manager-backend:8080`.
+- `/` routes to `task-manager-frontend:8080`.
+
+Gateway resources require compatible Gateway API CRDs and a controller. YAML presence alone does not prove the route is programmed.
+
+Validation commands:
 
 ```bash
-cd backend
-mvn test
+helm lint helm/task-manager
+helm template task-manager helm/task-manager -n task-manager
+kubectl get applications -n argocd
+kubectl get deployments,services,pods -n task-manager
+kubectl get hpa,pvc -n task-manager
+kubectl get gateway,httproute -n task-manager
 ```
 
-Covers: context load, health endpoint, create→get→list→update→delete lifecycle, validation (missing title → 400).
+## Terraform
 
-## Next steps (pipeline)
+The GitOps repository has Terraform configuration under `terraform/`. The AWS provider is configured with test credentials, skips several AWS credential/account metadata checks, and overrides the S3 endpoint to `http://localhost:4566`. It declares an S3 bucket named `ashwin-task-manager-terraform-state-demo`.
 
-This monolith is intentionally ready for: Maven build, JUnit, SonarQube, Trivy image scan, Docker Hub/ECR push, K8s manifests/Helm, GitHub Actions, Argo CD GitOps, Terraform (VPC/EKS/RDS), Prometheus/Grafana.
+This is configured for a local AWS-compatible endpoint, not proof of provisioning in a real AWS account.
 
+Important: declaring an `aws_s3_bucket` resource does not configure Terraform remote state. A remote backend requires an explicit `backend` block and initialization.
+
+The Terraform `.gitignore` excludes `.terraform/`, `*.tfstate`, `*.tfstate.*`, crash logs, and variable files. Keep state and secret-bearing files out of Git.
+
+## Security and known improvements
+
+1. Helm values inspected during the audit contained the placeholder database password `change-me`. Replace it with secure secret injection before any real deployment.
+2. GitHub Actions image scans currently use `exit-code: 0`; decide whether findings should block image publishing and configure enforcement accordingly.
+3. Gateway API YAML files were untracked in the local GitOps working tree during the audit. Validate and commit them if they are intended to be part of the shared deployment source.
+4. Terraform state was not listed by `git ls-files` during the audit. Keep it ignored.
+5. Compose frontend dependency waits for backend container start, not API readiness.
+6. Add Prometheus/Grafana documentation only after confirming the actual manifests, configuration, and runtime evidence.
+
+## Evidence to add
+
+Create `docs/screenshots/` and add genuine, sanitized evidence for:
+- Successful GitHub Actions workflow.
+- Successful Jenkins build.
+- GHCR packages and image tags.
+- GitOps commit showing image tag update.
+- Argo CD `Synced` / `Healthy` status, if verified.
+- Kubernetes workloads, HPA, PVC and Gateway status, if verified.
+- Terraform plan/apply against the local endpoint, if verified.
+- Monitoring dashboards only if configured and running.
+
+Never fabricate green pipeline screenshots, deployment status, scan results, cloud resources, or monitoring metrics.
+
+## Repository layout
+
+Application repository:
+
+```text
+.
+├── .github/workflows/ci.yml
+├── backend/
+├── frontend/
+├── docker-compose.yml
+├── Dockerfile.jenkins
+├── Jenkinsfile
+└── README.md
+```
+
+GitOps repository:
+
+```text
+task-manager-gitops/
+├── argocd/task-manager.yaml
+├── helm/task-manager/
+│   ├── Chart.yaml
+│   ├── values.yaml
+│   ├── gateway.yaml
+│   ├── gatewayclass.yaml
+│   ├── httproute.yaml
+│   └── templates/
+└── terraform/
+```
+
+## Repositories
+
+- Application: https://github.com/Ashwin1808/Demo-Tasts
+- GitOps: https://github.com/Ashwin1808/task-manager-gitops
